@@ -54,7 +54,8 @@ that, its advice is plausible and frequently wrong for you.
 
 Oracle365 separates the two. Generic SharePoint knowledge lives in
 `knowledge/` and ships with the repository. Your tenant's facts live in
-`tenant/` and never leave your machine. Answers draw on both.
+your OS config directory and never leave your machine. Answers draw on
+both.
 
 ## Scope
 
@@ -76,23 +77,57 @@ Out of scope:
 The layout allows those other workloads to be added later without
 restructuring.
 
-## Your tenant data stays private
+## Where your tenant data lives
 
-This repository is public. The knowledge base is meant to be shared. Your
-tenant configuration is not.
+Not in this repository. Not anywhere inside it.
 
-`tenant/` is listed in `.gitignore`. Site inventories, permission maps,
-group memberships, and license details never get committed. What is
-committed is a set of templates:
+A gitignored file in the repo would be the weak option: `.gitignore` is one
+edit from failing, `git add -f` bypasses it, and the file still sits in a
+folder that backup and sync tools sweep whole. Oracle365 keeps tenant data
+out of the repository entirely, using the convention `aws`, `gh`, `kubectl`,
+and `az` all follow.
+
+**Configuration** goes in the OS config directory:
 
 ```
-tenant/profile.example.md        Copy to tenant/profile.md and fill in
-tenant/conventions.example.md    Copy to tenant/conventions.md and fill in
+Linux/macOS:  ~/.config/oracle365/
+Windows:      %APPDATA%\Oracle365\
 ```
 
-Before your first commit, confirm `git status` does not list anything
-under `tenant/` other than the examples. A site inventory pushed to a
-public repository is a reconnaissance document for anyone who wants one.
+It holds `profile.md` (tenant identifiers, license tier, granted sites) and
+`conventions.md` (your standards). Override the location with
+`ORACLE365_CONFIG_DIR`.
+
+**Credentials** are never in a file at all. SharePoint app-only access in
+Entra requires a certificate; a client secret is not supported for
+SharePoint CSOM and REST. Setup creates a self-signed certificate directly
+in your OS certificate store, and the private key stays there. Your config
+holds the client ID, tenant ID, and certificate thumbprint, which are
+identifiers rather than secrets.
+
+**Regenerable inventory** goes in the cache directory (`~/.cache/oracle365/`
+or `%LOCALAPPDATA%\Oracle365\`), so deleting it is always safe.
+
+The repository holds templates and instructions. There is nothing in it to
+leak.
+
+One design rule follows from this: configuration stores conventions and
+pointers, never data. Site URLs and naming rules, yes. Member lists, no.
+Anything genuinely sensitive is read live from the tenant when needed and
+not kept at rest.
+
+## Least privilege
+
+The recommended grant is Microsoft Graph `Sites.Selected`, with access
+granted explicitly per site collection.
+
+This is a hard technical boundary rather than a policy. With
+`Sites.Selected`, the tool cannot reach a site that has not been granted,
+regardless of what any prompt, skill, or instruction says. The approval
+protocol below becomes a second line of defense instead of the only one.
+
+Tenant-wide grants such as `Sites.FullControl.All` are treated as an
+exception requiring written justification in your profile.
 
 ## Using it
 
@@ -112,44 +147,55 @@ Anything that changes the tenant stops for approval first.
 
 ## Agent compatibility
 
-The skills follow the open Agent Skills specification: a directory per
-skill, each with a `SKILL.md` carrying YAML frontmatter, plus optional
-`references/`, `scripts/`, and `assets/` subdirectories. That format is
-consumed by Claude Code, OpenAI Codex CLI, GitHub Copilot, Cursor, Gemini
-CLI, and Microsoft Agent Framework, among others.
+Skills follow the open Agent Skills specification: a directory per skill,
+each with a `SKILL.md` carrying YAML frontmatter, plus `references/`,
+`scripts/`, and `assets/` subdirectories. That format is consumed by Claude
+Code, OpenAI Codex CLI, GitHub Copilot, Cursor, Gemini CLI, and Microsoft
+Agent Framework, among others.
+
+Skills live in `skills/` at the repository root. `.claude/skills` is a
+symlink to it, so Claude Code discovers them with no configuration while the
+canonical location stays vendor-neutral. If your platform does not support
+symlinks in git, point your agent at `skills/` directly.
 
 Project instructions live in `AGENTS.md`, the cross-tool standard.
-`CLAUDE.md` exists as a one-line import of `AGENTS.md` so there is exactly
-one source of truth. Claude Code v2.1.277 and later can read `AGENTS.md`
-directly, but the import works on every version.
-
-Skills are stored in `.claude/skills/` because that is where Claude Code
-discovers them without configuration. The content is tool-neutral. Other
-agents that use a different discovery path can be pointed at that
-directory or given a copy.
+`CLAUDE.md` is a one-line import of it, so there is exactly one source of
+truth. Claude Code v2.1.277 and later reads `AGENTS.md` natively, but the
+import works on every version.
 
 Nothing here depends on a specific model or vendor.
 
 ## Repository layout
 
 ```
-AGENTS.md              Project instructions. Scope, safety contract, tenant pointer.
+AGENTS.md              Operating instructions. Safety contract, config resolution, routing.
 CLAUDE.md              One line: imports AGENTS.md.
-.claude/skills/        The skills. Organized by task, not by certification.
+skills/                Six skills, organized by task. Canonical location.
+.claude/skills         Symlink to skills/ for Claude Code discovery.
 knowledge/
   sharepoint/          Generic SharePoint Online knowledge.
   _shared/             Licensing, Entra identity, Graph, admin centers.
-tenant/                Gitignored except the examples. Your tenant's facts.
-  profile.example.md
-  conventions.example.md
+templates/             profile.example.md, conventions.example.md.
 scripts/
+  setup/               First-run setup.
   read/                Inspection and reporting.
   write/               Change operations, called only via tenant-ops.
 ```
 
-Skills are organized by the task a user brings, not by how the knowledge
-was sourced. Nobody asks for help with "a PL-400 problem." They ask why a
-flow keeps hitting a delegation warning.
+No `tenant/` directory. That is the point.
+
+Skills are organized by the task a user brings, not by how the knowledge was
+sourced. Nobody asks for help with "a PL-400 problem." They ask why a flow
+keeps hitting a delegation warning.
+
+| Skill | Handles |
+|---|---|
+| `sharepoint-architecture` | Site and hub topology, information architecture, list vs library vs Dataverse |
+| `sharepoint-governance` | Permissions, sharing, lifecycle, retention, labels, sprawl |
+| `sharepoint-build` | Lists, Power Apps, Power Automate, Power Fx, formatting, delegation |
+| `sharepoint-dev` | SPFx, Graph, app registration, Teams apps, PnP |
+| `sharepoint-triage` | Something is broken now: access, search, sync, links, migration |
+| `tenant-ops` | Every operation that reads from or writes to the live tenant |
 
 ## Safety contract
 
@@ -171,8 +217,8 @@ Oracle365 shows:
 Nothing runs until a human says so. Approving one change does not approve
 the next.
 
-**Every write is logged.** `tenant/inventory/changelog.md` records the
-timestamp, what changed, and the rollback command.
+**Every write is logged.** `changelog.md` in the cache directory records
+the timestamp, what changed, and the rollback command.
 
 **Bulk operations get a dry run.** Anything touching more than ten objects
 produces a full dry-run report first. Adjust the threshold in `AGENTS.md`.
@@ -192,39 +238,79 @@ than silently trusted.
 
 License tier gates what can be recommended. Sensitivity labels, Purview
 retention, DLP, and premium Power Platform connectors each sit behind
-specific licenses. Until a tier is recorded in `tenant/profile.md`,
+specific licenses. Until a tier is recorded in `profile.md`,
 governance advice stays inside features available at every tier.
 
 ## Setup
 
-1. Secure the administrative roles listed above.
-2. Clone the repository.
-3. Copy `tenant/profile.example.md` to `tenant/profile.md`.
-4. Ask the agent to inspect the tenant and fill in the profile, starting
-   with the license tier.
-5. Copy `tenant/conventions.example.md` to `tenant/conventions.md` and
-   record the standards you intend to hold to. This file is the one that
-   makes Oracle365 yours rather than generic.
+1. Secure the administrative roles listed above. Without them this is a
+   reference book.
 
-Tenant access needs a connector or credential the agent can use. A
-read-only Microsoft 365 connector covers inspection. Writes need Microsoft
-Graph with an app registration, or PnP PowerShell run from a machine that
-can reach Graph. Cloud-hosted agent sessions are often network-restricted
-and cannot reach `graph.microsoft.com`, so the write path usually runs
-locally.
+2. Clone the repository and install PnP PowerShell:
+
+   ```powershell
+   Install-Module PnP.PowerShell -Scope CurrentUser
+   ```
+
+3. Review `scripts/setup/Initialize-Oracle365.ps1`, then run it. It creates
+   the config directory, copies the templates, and registers an Entra ID
+   application with a certificate in your OS certificate store.
+
+   ```powershell
+   ./scripts/setup/Initialize-Oracle365.ps1 -Tenant contoso.onmicrosoft.com -WhatIf
+   ```
+
+   Run with `-WhatIf` first. It creates an app registration in your tenant,
+   which needs Global Administrator consent. Use `-SkipAppRegistration` if
+   one already exists.
+
+4. Grant the app access to specific sites:
+
+   ```powershell
+   Grant-PnPAzureADAppSitePermission -AppId <client_id> -Site <url> -Permissions Write
+   ```
+
+5. Fill in `profile.md`, starting with `license_tier`. It gates what can be
+   recommended.
+
+6. Fill in `conventions.md`. This is the file that makes Oracle365 yours
+   rather than generic. An empty section is honest; an invented one is not.
+
+7. Open the repository in your agent and ask it to verify the connection.
+
+The write path needs a machine that can reach `graph.microsoft.com`.
+Cloud-hosted agent sessions are often network-restricted, so writes usually
+run locally while reads can run anywhere a connector reaches.
 
 ## Status
 
-Early. The structure is settled, content is being written.
+Scaffolded. The structure, the safety contract, and the setup path are
+complete. The knowledge base is not written.
 
-Order of work:
+In place:
 
-1. `AGENTS.md` and the safety contract
-2. `tenant/` templates and `.gitignore`
-3. The read path, so inventory is generated rather than typed
-4. Governance and architecture skills, the daily-use ones
-5. Build, dev, and triage skills
-6. The write path, once the read path has proven the tenant model is right
+- `AGENTS.md` with the full safety contract, config resolution, license
+  gating, and skill routing
+- Six skills with working descriptions and real decision content
+- Configuration and conventions templates
+- First-run setup script with `-WhatIf` support
+
+Not written, and marked as such in the files themselves:
+
+- Every file under `skills/*/references/`. Each carries a "not yet written"
+  header so nothing is presented as authoritative by accident.
+- `knowledge/sharepoint/` and `knowledge/_shared/`
+
+`AGENTS.md` requires any answer drawing on unwritten or stale material to
+say so. A placeholder that announces itself is safe. A placeholder that
+looks like content is not.
+
+Next:
+
+1. Run setup against a real tenant and fill in `profile.md`
+2. Write the `tenant-ops` references, since everything routes through them
+3. Write the governance and triage references, the daily-use ones
+4. Fill `knowledge/` from current Microsoft documentation
 
 ## License
 

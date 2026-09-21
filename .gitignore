@@ -1,0 +1,20 @@
+# Tenant configuration never lives in this repository.
+# It belongs in the OS config directory. See AGENTS.md.
+#
+# These entries are a backstop for accidents, not the mechanism.
+tenant/
+*.pfx
+*.cer
+*.pem
+*.key
+profile.md
+conventions.md
+inventory/
+.env
+.env.*
+!.env.example
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
