@@ -42,6 +42,12 @@ Before proposing unique permissions, establish that group membership
 cannot solve it. Most requests for unique permissions are really requests
 for a group that does not exist yet.
 
+One case where it genuinely cannot: Microsoft 365 groups have no
+view-only concept, so read-only access on a group-connected team site is
+always a direct grant to the site Visitors group. That grant is invisible
+to anyone checking group membership and survives removal from the group.
+`references/permissions-model.md` covers it.
+
 When auditing, report:
 
 - Where inheritance is broken, and whether anything documents why
