@@ -284,3 +284,99 @@ function Write-Oracle365ChangeLog {
         Add-Content -LiteralPath $file -Value $line -Encoding UTF8
     }
 }
+
+function Read-Oracle365Snapshot {
+    <#
+    .SYNOPSIS
+        Reads a snapshot previously written by Write-Oracle365Snapshot.
+
+    .DESCRIPTION
+        Snapshots are a cache, not a source of truth. This function always
+        reports the snapshot's age, and warns past MaxAgeHours, because
+        AGENTS.md forbids treating cached tenant state as authoritative
+        without checking when it was taken.
+
+        Never use a snapshot to populate the "Current state" line of a
+        preflight. Read that live.
+
+    .OUTPUTS
+        The envelope written by Write-Oracle365Snapshot, or $null if
+        absent.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [int]$MaxAgeHours = 24,
+        [string]$CachePath = (Get-Oracle365CachePath)
+    )
+
+    $file = Join-Path $CachePath "$Name.json"
+    if (-not (Test-Path $file)) {
+        Write-Verbose "No snapshot at $file"
+        return $null
+    }
+
+    $envelope = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+
+    $generated = [datetime]::Parse($envelope.generated_utc).ToUniversalTime()
+    $ageHours  = [math]::Round(((Get-Date).ToUniversalTime() - $generated).TotalHours, 1)
+
+    if ($ageHours -gt $MaxAgeHours) {
+        Write-Warning "Snapshot '$Name' is $ageHours hours old (generated $($envelope.generated_utc))."
+        Write-Warning "Regenerate it before relying on it."
+    }
+    else {
+        Write-Verbose "Snapshot '$Name' is $ageHours hours old."
+    }
+
+    return $envelope
+}
+
+function Invoke-Oracle365Throttled {
+    <#
+    .SYNOPSIS
+        Runs a scriptblock per item with a pause between items.
+
+    .DESCRIPTION
+        SharePoint throttles aggressively and does not warn first. Walking
+        every site and every list in a tenant is exactly the shape of
+        request that triggers it.
+
+        A failure in one item is reported and skipped rather than aborting
+        the run, so a single inaccessible site does not lose an hour of
+        audit work.
+
+    .PARAMETER DelayMilliseconds
+        Pause between items. 200 is gentle enough for a few hundred sites.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][object[]]$Items,
+        [Parameter(Mandatory)][scriptblock]$Action,
+        [int]$DelayMilliseconds = 200,
+        [string]$Activity = 'Processing'
+    )
+
+    $results = @()
+    $i = 0
+
+    foreach ($item in $Items) {
+        $i++
+        Write-Progress -Activity $Activity -Status "$i of $($Items.Count)" `
+            -PercentComplete (($i / [math]::Max($Items.Count, 1)) * 100)
+
+        try {
+            $results += & $Action $item
+        }
+        catch {
+            Write-Warning "Skipped item $i : $($_.Exception.Message)"
+        }
+
+        if ($i -lt $Items.Count) {
+            Start-Sleep -Milliseconds $DelayMilliseconds
+        }
+    }
+
+    Write-Progress -Activity $Activity -Completed
+    return $results
+}

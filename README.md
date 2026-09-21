@@ -325,22 +325,32 @@ In place:
 - Configuration and conventions templates
 - First-run setup script with `-WhatIf` support
 
+- `knowledge/_shared/licensing.md`, the gate every recommendation passes
+  through, with per-claim sources and verification dates
+- A read path: licensing and tenant settings, site inventory, permissions
+  audit, sharing report, over a shared library handling paging, throttling
+  and snapshot stamping
+
 Not written, and marked as such in the files themselves:
 
 - Every file under `skills/*/references/`. Each carries a "not yet written"
   header so nothing is presented as authoritative by accident.
-- `knowledge/sharepoint/` and `knowledge/_shared/`
+- `knowledge/sharepoint/`
 
 `AGENTS.md` requires any answer drawing on unwritten or stale material to
 say so. A placeholder that announces itself is safe. A placeholder that
 looks like content is not.
 
+No script here has been executed. They were written against current PnP
+PowerShell documentation and checked structurally, not run.
+
 Next:
 
-1. Run setup against a real tenant and fill in `profile.md`
+1. Run setup against a real tenant, then the read scripts, and fix what
+   breaks. Nothing is trustworthy until this happens.
 2. Write the `tenant-ops` references, since everything routes through them
 3. Write the governance and triage references, the daily-use ones
-4. Fill `knowledge/` from current Microsoft documentation
+4. Fill `knowledge/sharepoint/` from current Microsoft documentation
 
 ## License
 

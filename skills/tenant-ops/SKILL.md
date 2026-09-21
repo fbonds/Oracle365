@@ -45,10 +45,31 @@ Prefer reading over asking. If the user asks why someone cannot see a
 library, go look at the library rather than asking them to describe its
 permissions.
 
-Write results to the cache directory, not the repository. Stamp every
-inventory file with the time it was generated and the scope it covers.
+Use the scripts rather than writing ad hoc commands. They handle paging,
+throttling, and snapshot stamping, and they have been checked against
+current documentation:
 
-When reporting, distinguish what you observed from what you inferred.
+| Script | Reports |
+|---|---|
+| `scripts/read/Get-TenantProfile.ps1` | Licensing, service plans, tenant settings |
+| `scripts/read/Get-SiteInventory.ps1` | Sites, owners, storage, dormancy |
+| `scripts/read/Get-PermissionsAudit.ps1` | Admins, groups, broken inheritance |
+| `scripts/read/Get-SharingReport.ps1` | Tenant and site sharing, external users |
+
+All four default to `-Mode Delegated`. Tenant-wide reads cannot run
+app-only under `Sites.Selected`.
+
+Run `Get-SiteInventory.ps1` first. The other two accept `-FromInventory`
+and reuse its snapshot rather than re-enumerating.
+
+Snapshots go to the cache directory, never the repository, stamped with
+generation time and scope. `Read-Oracle365Snapshot` warns past 24 hours.
+Never populate a preflight's "Current state" from one.
+
+When reporting, distinguish what you observed from what you inferred, and
+a finding from a violation. A finding is a fact. It is a violation only if
+it contradicts `conventions.md`, and not even then if the exceptions table
+in `profile.md` records it as a decision.
 
 ## Writes
 
