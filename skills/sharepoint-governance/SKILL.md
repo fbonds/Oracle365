@@ -20,25 +20,18 @@ permissions problem that is broken right now is triage, not governance.
 
 ## License gates
 
-Do not recommend these without confirming the tier:
+Read `knowledge/_shared/licensing.md` before recommending sensitivity
+labels, retention, DLP, Conditional Access, access reviews, premium
+connectors, or Dataverse. It carries the current gates with per-claim
+sources and verification dates, and it is the single place they are
+maintained. Do not reproduce a licensing table here or answer from memory.
 
-| Feature | Typically requires |
-|---|---|
-| Sensitivity labels | Entra ID P1 or above, Purview |
-| Auto-labeling | E5 or Information Protection add-on |
-| Purview retention policies | E3 or above |
-| Data Loss Prevention | E3 for basic, E5 for full |
-| Conditional Access | Entra ID P1 |
-| Access reviews | Entra ID P2 |
-| Insider risk | E5 |
-
-Tiers change. Verify against current Microsoft licensing rather than
-trusting this table alone. It is a prompt to check, not an authority.
-
-At Business Basic or Standard, most of the above is unavailable.
-Governance there is site-level settings, group hygiene, naming discipline,
-and manual review. Say that plainly rather than recommending what cannot
-be bought.
+At Business Basic or Business Standard, none of those features exist.
+Governance there is structure, site-level sharing settings, group
+membership hygiene, naming discipline, versioning, named owners, and a
+review cadence somebody actually keeps. That is a complete approach, not a
+degraded one. `licensing.md` sets out what it looks like. Say that plainly
+rather than recommending what the organization cannot buy.
 
 ## Permissions
 
