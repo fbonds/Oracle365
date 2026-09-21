@@ -121,22 +121,36 @@ result rather than completing the run and reporting a list of failures.
 
 ## Irreversible operations
 
-These cannot be rolled back, or can only be rolled back on a timescale
-that makes it theoretical:
+Two different things, and conflating them loses content.
 
-- Deleting a site collection
+**No rollback at all.** Say so in the Rollback field in those words.
+
+- `Remove-PnPTenantSite -SkipRecycleBin`
 - Emptying the second-stage recycle bin
-- Removing the last site collection administrator
-- Deleting a content type or site column in use
-- Disabling external sharing where active links exist
+- `Clear-PnPTenantRecycleBinItem`
+- Deleting a content type or site column that is in use
+
+**Rollback within a retention window.** Name the cmdlet and say the window
+must be checked.
+
+- `Remove-PnPTenantSite` without `-SkipRecycleBin`, restorable with
+  `Restore-PnPTenantRecycleBinItem`
 - Deleting a Microsoft 365 group backing a team site
+- Deleting list items
 
-For these: state plainly that it cannot be undone, require confirmation in
-a separate message, and never bundle one with other changes.
+Never state a retention period from memory. Read the tenant setting.
 
-For site deletion specifically, check the retention period for the
-tenant's recycle bin and state the actual window rather than assuming 93
-days.
+**Disruptive rather than irreversible.** Same care, because the damage
+lands before anyone notices.
+
+- Removing the last site collection administrator
+- Disabling external sharing where active links exist
+
+For all of these: state plainly what can and cannot be undone, require
+confirmation in a separate message, and never bundle one with other
+changes.
+
+Worked examples are in `references/preflight-examples.md`.
 
 ## Refusals
 

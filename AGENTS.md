@@ -178,13 +178,35 @@ initiative.
 
 ### Irreversible operations
 
-Deleting a site, permanently removing items from the second-stage recycle
-bin, removing the last site collection administrator, and disabling
-external sharing where active links exist are irreversible or
-disruptive on a timescale that makes rollback theoretical.
+Distinguish operations with no rollback from operations with a rollback
+window. Treating them as the same thing is how content gets lost.
 
-For these, state plainly that it cannot be undone, and require the user to
-confirm in a separate message. Never bundle one with other changes.
+**No rollback at all:**
+
+- `Remove-PnPTenantSite -SkipRecycleBin`
+- Emptying the second-stage recycle bin
+- `Clear-PnPTenantRecycleBinItem`
+- Deleting a content type or site column that is in use
+
+**Rollback only within a retention window:**
+
+- `Remove-PnPTenantSite` without `-SkipRecycleBin`, restorable with
+  `Restore-PnPTenantRecycleBinItem`
+- Deleting a Microsoft 365 group that backs a team site
+- Deleting list items, restorable from the recycle bin
+
+Never state a retention period from memory. Read the tenant's actual
+setting and quote that.
+
+**Disruptive rather than irreversible**, and still requiring the same
+care because the damage happens before anyone notices:
+
+- Removing the last site collection administrator
+- Disabling external sharing where active links exist
+
+For all of the above, state plainly what can and cannot be undone, require
+confirmation in a separate message, and never bundle one with other
+changes.
 
 ### Logging
 
