@@ -118,8 +118,15 @@ not kept at rest.
 
 ## Least privilege
 
-The recommended grant is Microsoft Graph `Sites.Selected`, with access
-granted explicitly per site collection.
+The recommended grant is `Sites.Selected` on both the SharePoint and the
+Microsoft Graph APIs, with access granted explicitly per site collection.
+
+Both are needed, and this catches people out. `Sites.Selected` exists
+separately on each API. PnP PowerShell's CSOM operations and
+`Grant-PnPEntraIDAppSitePermission` depend on the SharePoint API
+permission. Graph-based reads depend on the Graph one. An app granted only
+Graph `Sites.Selected` will fail in PnP with errors that look like a
+consent problem.
 
 This is a hard technical boundary rather than a policy. With
 `Sites.Selected`, the tool cannot reach a site that has not been granted,
@@ -264,11 +271,19 @@ governance advice stays inside features available at every tier.
    which needs Global Administrator consent. Use `-SkipAppRegistration` if
    one already exists.
 
-4. Grant the app access to specific sites:
+4. Grant the app access to each site it needs, one at a time:
 
    ```powershell
-   Grant-PnPAzureADAppSitePermission -AppId <client_id> -Site <url> -Permissions Write
+   Grant-PnPEntraIDAppSitePermission `
+     -AppId <client_id> `
+     -DisplayName Oracle365 `
+     -Permissions Read `
+     -Site https://<tenant>.sharepoint.com/sites/<site>
    ```
+
+   `-DisplayName` must match the app registration name exactly.
+   `-Permissions` accepts Read, Write, Manage, or FullControl. Start at
+   Read and raise it when something actually needs it.
 
 5. Fill in `profile.md`, starting with `license_tier`. It gates what can be
    recommended.

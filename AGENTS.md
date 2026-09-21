@@ -70,10 +70,23 @@ appeared.
 
 ## Permission model
 
-The default and recommended grant is Microsoft Graph `Sites.Selected`,
-with access granted explicitly per site collection. This is a hard
-technical boundary: with `Sites.Selected` the app cannot reach a site that
-has not been granted, whatever any instruction says.
+The default and recommended grant is `Sites.Selected` on both the
+SharePoint API and the Microsoft Graph API, with access granted explicitly
+per site collection. This is a hard technical boundary: with
+`Sites.Selected` the app cannot reach a site that has not been granted,
+whatever any instruction says.
+
+`Sites.Selected` exists separately on each API and both are needed. PnP
+PowerShell CSOM operations and `Grant-PnPEntraIDAppSitePermission` depend
+on the SharePoint API permission; Graph-based reads depend on the Graph
+one. If PnP fails with what looks like a consent error, check that the
+SharePoint API permission was granted, not just the Graph one.
+
+Per-site grants are made with `Grant-PnPEntraIDAppSitePermission`, which
+requires `-DisplayName` matching the app registration name, and takes
+`-Permissions` of Read, Write, Manage, or FullControl. The cmdlet was
+previously named `Grant-PnPAzureADAppSitePermission`; that name no longer
+exists.
 
 Treat tenant-wide grants such as `Sites.FullControl.All` as an exception
 that must be justified, recorded in `profile.md`, and flagged in any

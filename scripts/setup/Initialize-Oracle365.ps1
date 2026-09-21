@@ -15,8 +15,32 @@
     private key is created in the current user's certificate store by
     Register-PnPEntraIDApp and stays there.
 
+    The app is registered with Sites.Selected on both the SharePoint and
+    the Microsoft Graph APIs. Both are needed. PnP CSOM operations and
+    Grant-PnPEntraIDAppSitePermission depend on the SharePoint API
+    permission; Graph-based reads depend on the Graph one.
+
+    Sites.Selected grants no access by itself. After consent you grant the
+    app access to individual site collections with
+    Grant-PnPEntraIDAppSitePermission. That is deliberate.
+
 .PARAMETER Tenant
-    Tenant domain, for example contoso.onmicrosoft.com
+    Tenant domain, for example contoso.onmicrosoft.com. Without it, the
+    app registration step is skipped.
+
+.PARAMETER ApplicationName
+    Name of the Entra ID application. Defaults to Oracle365. This name is
+    also required by Grant-PnPEntraIDAppSitePermission -DisplayName, so
+    changing it means using the new name there too.
+
+.PARAMETER CertificateValidYears
+    Certificate lifetime in years. Defaults to 2. Record the expiry
+    somewhere you will see it: an expired certificate fails as an auth
+    error that looks like a permissions problem.
+
+.PARAMETER DeviceLogin
+    Authenticate with device code instead of a browser window. Use this
+    over SSH or anywhere a browser cannot open.
 
 .PARAMETER SkipAppRegistration
     Create the config directory and copy templates only. Use this if an
@@ -26,14 +50,37 @@
 .EXAMPLE
     ./Initialize-Oracle365.ps1 -Tenant contoso.onmicrosoft.com -WhatIf
 
+    Shows what would happen without changing anything. Run this first.
+
+.EXAMPLE
+    ./Initialize-Oracle365.ps1 -Tenant contoso.onmicrosoft.com
+
+.EXAMPLE
+    ./Initialize-Oracle365.ps1 -SkipAppRegistration
+
+    Config directory and templates only.
+
 .NOTES
-    Requires the PnP.PowerShell module.
+    Requires the PnP.PowerShell module and PowerShell 7 or later on
+    Linux and macOS. Cmdlet names and parameters verified against the PnP
+    PowerShell documentation on the dev branch, 2026-09-21.
+
+    Not yet executed against a live tenant. Use -WhatIf first.
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
     [Parameter(Mandatory = $false)]
     [string]$Tenant,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ApplicationName = 'Oracle365',
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(1, 10)]
+    [int]$CertificateValidYears = 2,
+
+    [switch]$DeviceLogin,
 
     [switch]$SkipAppRegistration
 )
@@ -137,34 +184,69 @@ else {
         Write-Host 'About to create an Entra ID app registration.'
         Write-Host ''
         Write-Host "  Tenant:      $Tenant"
-        Write-Host '  Name:        Oracle365'
+        Write-Host "  Name:        $ApplicationName"
         Write-Host '  Certificate: self-signed, created in CurrentUser\My'
-        Write-Host '  Permission:  Sites.Selected (application)'
+        Write-Host '  SharePoint:  Sites.Selected (application)'
+        Write-Host '  Graph:       Sites.Selected (application)'
         Write-Host ''
-        Write-Host 'Sites.Selected grants no access on its own. After consent you'
-        Write-Host 'must grant this app access to each site collection explicitly.'
-        Write-Host 'This is deliberate. Do not widen it without recording why.'
+        Write-Host 'Both are requested deliberately. Grant-PnPEntraIDAppSitePermission'
+        Write-Host 'and PnP CSOM operations depend on the SharePoint API permission;'
+        Write-Host 'Graph-based reads depend on the Graph one. Requesting only Graph'
+        Write-Host 'Sites.Selected leaves PnP unable to work.'
+        Write-Host ''
+        Write-Host 'Sites.Selected grants no access on its own. After consent you must'
+        Write-Host 'grant this app access to each site collection explicitly. That is'
+        Write-Host 'the point. Do not widen it without recording why in profile.md.'
+        Write-Host ''
+        Write-Host 'Note: Register-PnPEntraIDApp defaults to Sites.FullControl.All,'
+        Write-Host 'Group.ReadWrite.All and User.Read.All when no permissions are'
+        Write-Host 'specified. This script always specifies them, so that default'
+        Write-Host 'never applies here.'
         Write-Host ''
         Write-Host 'A Global Administrator must consent to the registration.'
         Write-Host ''
 
-        if ($PSCmdlet.ShouldProcess($Tenant, 'Register Entra ID application "Oracle365"')) {
-            $app = Register-PnPEntraIDApp `
-                -ApplicationName 'Oracle365' `
-                -Tenant $Tenant `
-                -GraphApplicationPermissions 'Sites.Selected' `
-                -Store CurrentUser `
-                -Interactive
+        if ($PSCmdlet.ShouldProcess($Tenant, "Register Entra ID application '$ApplicationName'")) {
+
+            $registerArgs = @{
+                ApplicationName                  = $ApplicationName
+                Tenant                           = $Tenant
+                Store                            = 'CurrentUser'
+                SharePointApplicationPermissions = @('Sites.Selected')
+                GraphApplicationPermissions      = @('Sites.Selected')
+                ValidYears                       = $CertificateValidYears
+            }
+            if ($DeviceLogin) { $registerArgs['DeviceLogin'] = $true }
+
+            try {
+                $app = Register-PnPEntraIDApp @registerArgs
+            }
+            catch {
+                Write-Host ''
+                Write-Error "App registration failed: $($_.Exception.Message)"
+                Write-Host ''
+                Write-Host 'Common causes:'
+                Write-Host '  - The signed-in account is not a Global Administrator.'
+                Write-Host '  - Users are blocked from registering applications in this'
+                Write-Host '    tenant. An administrator must either lift that or create'
+                Write-Host '    the registration by hand.'
+                Write-Host '  - An application with this name already exists. Re-run with'
+                Write-Host '    -SkipAppRegistration, or pass a different -ApplicationName.'
+                Write-Host ''
+                Write-Host 'The config directory and templates were created regardless.'
+                return
+            }
 
             Write-Host ''
-            Write-Host 'Registered. Record these in profile.md:'
+            Write-Host 'Registered. Full result follows. Record the application id and'
+            Write-Host 'certificate thumbprint in profile.md.'
             Write-Host ''
-            Write-Host "  client_id:              $($app.'AzureAppId/ClientId')"
-            Write-Host "  certificate_thumbprint: $($app.'Certificate Thumbprint')"
-            Write-Host '  certificate_location:   CurrentUser\My'
-            Write-Host ''
+            $app | Format-List | Out-String | Write-Host
             Write-Host 'None of the above is a secret. The private key stays in the'
             Write-Host 'certificate store and is not written to any file by this script.'
+            Write-Host ''
+            Write-Host 'Consent is not automatic. Confirm in the Entra portal that'
+            Write-Host 'admin consent has been granted before relying on this app.'
         }
     }
 }
@@ -178,6 +260,20 @@ Write-Host "1. Fill in $(Join-Path $configPath 'profile.md')"
 Write-Host '   Start with license_tier. It gates what can be recommended.'
 Write-Host "2. Fill in $(Join-Path $configPath 'conventions.md')"
 Write-Host '   An empty section is honest. An invented one is not.'
-Write-Host '3. Grant the app access to specific sites with Grant-PnPAzureADAppSitePermission.'
-Write-Host '4. Open the repository in your agent and ask it to verify the connection.'
+Write-Host '3. Grant the app access to each site it needs, one at a time:'
+Write-Host ''
+Write-Host '     Grant-PnPEntraIDAppSitePermission `'
+Write-Host "       -AppId <client_id> -DisplayName '$ApplicationName' ``"
+Write-Host '       -Permissions Read -Site https://<tenant>.sharepoint.com/sites/<site>'
+Write-Host ''
+Write-Host '   -DisplayName must match the app registration name exactly.'
+Write-Host '   Permissions are Read, Write, Manage or FullControl. Start at Read.'
+Write-Host ''
+Write-Host '4. Verify the connection:'
+Write-Host ''
+Write-Host '     Connect-PnPOnline -Url <site> -ClientId <client_id> `'
+Write-Host "       -Tenant $Tenant -Thumbprint <thumbprint>"
+Write-Host '     Get-PnPWeb'
+Write-Host ''
+Write-Host '5. Open the repository in your agent and ask it to check the profile.'
 Write-Host ''
