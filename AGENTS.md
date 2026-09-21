@@ -88,9 +88,40 @@ requires `-DisplayName` matching the app registration name, and takes
 previously named `Grant-PnPAzureADAppSitePermission`; that name no longer
 exists.
 
-Treat tenant-wide grants such as `Sites.FullControl.All` as an exception
-that must be justified, recorded in `profile.md`, and flagged in any
-answer that depends on it.
+Treat tenant-wide application grants such as `Sites.FullControl.All` as an
+exception that must be justified, recorded in `profile.md`, and flagged in
+any answer that depends on it.
+
+### Two identities
+
+`Sites.Selected` is per-site by design. It can inspect a site that has been
+granted; it cannot discover one. Two operations are therefore impossible
+app-only and must run delegated:
+
+- **Site enumeration.** `Get-PnPTenantSite` requires SharePoint Online
+  administrator access.
+- **Licensing.** Graph `/subscribedSkus` requires
+  `LicenseAssignment.Read.All` at minimum.
+
+So Oracle365 uses two identities:
+
+| Identity | Used for | Bounded by |
+|---|---|---|
+| Delegated, interactive | Tenant-wide reads: inventory, audit, licensing | The roles the signed-in person holds |
+| App-only, certificate | Writes and automation against granted sites | `Sites.Selected` plus the per-site grant |
+
+The point of the split: nothing that can read the whole tenant runs
+unattended. Delegated permissions cannot exceed the person using them, so
+no standing credential exists that would let a stolen certificate enumerate
+the tenant.
+
+Scripts take `-Mode Delegated` or `-Mode AppOnly` and default to
+`Delegated`. When a tenant-wide read fails under app-only, the fix is to
+connect delegated, never to widen the application grant.
+
+Since 9 September 2024, `Connect-PnPOnline -Interactive` requires
+`-ClientId`. It comes from `profile.md`, or from the `ENTRAID_APP_ID` or
+`ENTRAID_CLIENT_ID` environment variable.
 
 When a requested operation fails because a site is not granted, do not
 propose widening the grant as the first fix. Propose granting that one

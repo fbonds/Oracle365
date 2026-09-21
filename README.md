@@ -133,8 +133,22 @@ This is a hard technical boundary rather than a policy. With
 regardless of what any prompt, skill, or instruction says. The approval
 protocol below becomes a second line of defense instead of the only one.
 
-Tenant-wide grants such as `Sites.FullControl.All` are treated as an
-exception requiring written justification in your profile.
+Tenant-wide application grants such as `Sites.FullControl.All` are treated
+as an exception requiring written justification in your profile.
+
+There is a limit to this, and the design accounts for it rather than
+pretending otherwise. `Sites.Selected` can inspect a site it has been
+granted, but it cannot discover one. Site enumeration needs SharePoint
+Administrator, and reading licensing needs a Graph licensing permission.
+Neither is possible app-only under `Sites.Selected`.
+
+So Oracle365 uses two identities. Tenant-wide reads run **delegated**, as
+the signed-in administrator, bounded by the roles that person actually
+holds. Writes and automation run **app-only** against explicitly granted
+sites. Nothing that can read the whole tenant runs unattended, and a stolen
+certificate cannot enumerate anything it was not granted.
+
+Scripts take `-Mode Delegated` or `-Mode AppOnly` and default to delegated.
 
 ## Using it
 
@@ -184,6 +198,7 @@ knowledge/
   _shared/             Licensing, Entra identity, Graph, admin centers.
 templates/             profile.example.md, conventions.example.md.
 scripts/
+  lib/                 Shared: path resolution, profile parsing, connection.
   setup/               First-run setup.
   read/                Inspection and reporting.
   write/               Change operations, called only via tenant-ops.

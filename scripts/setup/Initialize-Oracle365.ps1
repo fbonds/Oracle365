@@ -15,14 +15,22 @@
     private key is created in the current user's certificate store by
     Register-PnPEntraIDApp and stays there.
 
-    The app is registered with Sites.Selected on both the SharePoint and
-    the Microsoft Graph APIs. Both are needed. PnP CSOM operations and
-    Grant-PnPEntraIDAppSitePermission depend on the SharePoint API
-    permission; Graph-based reads depend on the Graph one.
+    The app carries two sets of permissions, for two different jobs.
 
-    Sites.Selected grants no access by itself. After consent you grant the
-    app access to individual site collections with
-    Grant-PnPEntraIDAppSitePermission. That is deliberate.
+    Application permissions, used unattended: Sites.Selected on both the
+    SharePoint and the Microsoft Graph APIs. Both are needed. PnP CSOM
+    operations and Grant-PnPEntraIDAppSitePermission depend on the
+    SharePoint one; Graph reads depend on the Graph one. Sites.Selected
+    grants no access by itself, so after consent you grant the app access
+    to individual sites with Grant-PnPEntraIDAppSitePermission.
+
+    Delegated permissions, used interactively: AllSites.FullControl on
+    SharePoint and LicenseAssignment.Read.All on Graph. Tenant-wide reads
+    need these. Get-PnPTenantSite requires SharePoint Administrator and
+    /subscribedSkus requires a licensing permission, neither of which
+    Sites.Selected can provide. Delegated permissions are capped by the
+    roles the signed-in person holds, so this creates no standing
+    credential that can read the tenant unattended.
 
 .PARAMETER Tenant
     Tenant domain, for example contoso.onmicrosoft.com. Without it, the
@@ -186,13 +194,28 @@ else {
         Write-Host "  Tenant:      $Tenant"
         Write-Host "  Name:        $ApplicationName"
         Write-Host '  Certificate: self-signed, created in CurrentUser\My'
-        Write-Host '  SharePoint:  Sites.Selected (application)'
-        Write-Host '  Graph:       Sites.Selected (application)'
+        Write-Host '  Application permissions (unattended, app-only):'
+        Write-Host '    SharePoint:  Sites.Selected'
+        Write-Host '    Graph:       Sites.Selected'
         Write-Host ''
-        Write-Host 'Both are requested deliberately. Grant-PnPEntraIDAppSitePermission'
-        Write-Host 'and PnP CSOM operations depend on the SharePoint API permission;'
-        Write-Host 'Graph-based reads depend on the Graph one. Requesting only Graph'
-        Write-Host 'Sites.Selected leaves PnP unable to work.'
+        Write-Host '  Delegated permissions (interactive, as the signed-in user):'
+        Write-Host '    SharePoint:  AllSites.FullControl'
+        Write-Host '    Graph:       LicenseAssignment.Read.All, User.Read'
+        Write-Host ''
+        Write-Host 'Two identities, deliberately.'
+        Write-Host ''
+        Write-Host 'The application permissions are what runs unattended, so they are'
+        Write-Host 'kept to Sites.Selected: per-site, granted one site at a time. Both'
+        Write-Host 'APIs are needed. Grant-PnPEntraIDAppSitePermission and PnP CSOM'
+        Write-Host 'depend on the SharePoint one; Graph reads depend on the Graph one.'
+        Write-Host ''
+        Write-Host 'The delegated permissions are what tenant-wide reads use. Site'
+        Write-Host 'enumeration and licensing are impossible under Sites.Selected:'
+        Write-Host 'Get-PnPTenantSite requires SharePoint Administrator, and'
+        Write-Host '/subscribedSkus requires LicenseAssignment.Read.All. Delegated'
+        Write-Host 'permissions are bounded by the roles the signed-in person actually'
+        Write-Host 'holds, so they add no standing credential that could read the'
+        Write-Host 'tenant on its own. Nothing runs unattended under them.'
         Write-Host ''
         Write-Host 'Sites.Selected grants no access on its own. After consent you must'
         Write-Host 'grant this app access to each site collection explicitly. That is'
@@ -214,6 +237,8 @@ else {
                 Store                            = 'CurrentUser'
                 SharePointApplicationPermissions = @('Sites.Selected')
                 GraphApplicationPermissions      = @('Sites.Selected')
+                SharePointDelegatePermissions    = @('AllSites.FullControl')
+                GraphDelegatePermissions         = @('LicenseAssignment.Read.All', 'User.Read')
                 ValidYears                       = $CertificateValidYears
             }
             if ($DeviceLogin) { $registerArgs['DeviceLogin'] = $true }
